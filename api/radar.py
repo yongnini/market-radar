@@ -587,6 +587,95 @@ def generate_mock_trends(keyword: str, markets: list) -> dict:
 
 
 # ─────────────────────────────────────────────
+# Reddit VOC 离线快照（rdt-cli 采集，用于 OAuth 不可用时展示）
+# ─────────────────────────────────────────────
+def generate_reddit_voc_snapshot(keyword: str, reddit_result: dict) -> Optional[dict]:
+    """返回离线 Reddit Voice-of-Customer 快照。仅在 live Reddit 不可用时使用。"""
+    if reddit_result.get("posts"):
+        return None
+
+    normalized = keyword.strip().lower()
+    if "portable blender" not in normalized and "personal blender" not in normalized:
+        return None
+
+    return {
+        "status": "offline_snapshot",
+        "source": "rdt-cli Reddit search export",
+        "collected_at": "2026-07-05",
+        "matched_query": "portable blender",
+        "sample_size": 20,
+        "summary": (
+            "Offline Reddit VOC snapshot shows buyers care less about novelty and more about "
+            "whether a portable blender can reliably handle frozen fruit, ice, protein shakes, "
+            "quiet morning use, easy cleaning, and commuting or dorm constraints."
+        ),
+        "themes": [
+            {
+                "title": "Frozen ingredients are the trust test",
+                "signal": "Users repeatedly ask whether compact blenders can handle ice, frozen berries, bananas, dates, nuts, and fibrous ingredients without stalling.",
+                "evidence": [
+                    "Smoothies thread: buyer compares Nutribullet and Ninja Blast for ice and frozen berries.",
+                    "IndianFood thread: users warn that dates, nuts, turmeric, amla, and coconut need torque, not just blade speed.",
+                ],
+                "actions": [
+                    "Lead product messaging with frozen-fruit and ice performance tests.",
+                    "Show short proof videos instead of only lifestyle photos.",
+                ],
+            },
+            {
+                "title": "Quiet convenience drives purchase occasions",
+                "signal": "Several posts mention early mornings, roommates, work, commuting, dorms, and protein shakes as the reason to choose portable over full-size blenders.",
+                "evidence": [
+                    "Smoothies thread: user wants a blender for 6am workdays without waking roommates.",
+                    "New Zealand thread: user wants a blender to drop in a work bag for afternoon protein and banana.",
+                ],
+                "actions": [
+                    "Position around office, car, dorm, and early-morning routines.",
+                    "Add noise and leak-proof claims where the product can support them.",
+                ],
+            },
+            {
+                "title": "Durability and cleaning are conversion blockers",
+                "signal": "Users hesitate because reviews mention weak blades, products stopping after some time, messy blending, and uncertainty about whether portable is worth it.",
+                "evidence": [
+                    "IndianFood thread: Amazon reviews mention weak blades and units stopping after some time.",
+                    "DeinfluencingPH threads: buyers ask whether a portable blender is worth buying or a waste of money.",
+                ],
+                "actions": [
+                    "Surface warranty, motor protection, and replacement policy close to the CTA.",
+                    "Use cleaning simplicity as a primary comparison point.",
+                ],
+            },
+        ],
+        "competitor_mentions": [
+            {"name": "Ninja Blast", "signal": "Frequent comparison option; mixed confidence on frozen fruit."},
+            {"name": "Nutribullet portable", "signal": "Common shortlist brand for work-bag protein shakes."},
+            {"name": "BlendJet", "signal": "Relevant category reference for portable blending, even when not always named in top posts."},
+        ],
+        "sample_posts": [
+            {
+                "title": "Best portable blenders for protein shakes",
+                "subreddit": "Smoothies",
+                "url": "https://www.reddit.com/r/Smoothies/comments/1nvqwwb/best_portable_blenders_for_protein_shakes/",
+                "signal": "Ice and frozen berries are decisive comparison criteria.",
+            },
+            {
+                "title": "Why your portable blender keeps failing with Indian ingredients and what to look for instead",
+                "subreddit": "IndianFood",
+                "url": "https://www.reddit.com/r/IndianFood/comments/1tpyd68/why_your_portable_blender_keeps_failing_with/",
+                "signal": "Ingredient toughness varies by cuisine and needs torque-led positioning.",
+            },
+            {
+                "title": "Best portable blender",
+                "subreddit": "Smoothies",
+                "url": "https://www.reddit.com/r/Smoothies/comments/1uaestk/best_portable_blender/",
+                "signal": "Quiet early-morning and work use cases motivate portable purchase.",
+            },
+        ],
+    }
+
+
+# ─────────────────────────────────────────────
 # API 业务逻辑
 # ─────────────────────────────────────────────
 def build_radar_response(params: dict) -> tuple[int, dict]:
@@ -637,6 +726,7 @@ def build_radar_response(params: dict) -> tuple[int, dict]:
             "strategy": strategy,
             "news": news_result.get("articles", []),
             "reddit": reddit_result.get("posts", []),
+            "reddit_voc": generate_reddit_voc_snapshot(keyword, reddit_result),
             "data_sources": {
                 "google_trends": {
                     "status": trends_result.get("source_status", "unknown"),

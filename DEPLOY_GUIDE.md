@@ -61,6 +61,8 @@ NewsAPI 需要 `NEWS_API_KEY`。没有配置时新闻模块会显示不可用。
 
 Reddit 优先使用 OAuth。没有 `REDDIT_CLIENT_ID` 和 `REDDIT_CLIENT_SECRET` 时会尝试公开 JSON 接口；如果 Reddit 返回 403，页面会显示 Reddit unavailable。
 
+项目也支持 `Offline Reddit VOC Snapshot`。这是一份用本地 `rdt-cli` 抓取真实 Reddit 帖子后整理出的离线消费者洞察，不依赖 Vercel 线上 OAuth。它会被明确标注为 `Offline VOC`，适合在作品集中展示 Voice-of-Customer 分析能力，但不应被描述为实时 Reddit API 数据。
+
 ## GitHub Actions
 
 仓库包含 `.github/workflows/market-radar-smoke.yml`。每次推送到 `main` 后会自动：

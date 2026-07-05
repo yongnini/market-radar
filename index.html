@@ -600,6 +600,92 @@
         }
         .news-type-badge.news { background: rgba(107, 142, 142, 0.12); color: var(--chart-1); }
         .news-type-badge.reddit { background: rgba(155, 142, 168, 0.12); color: var(--chart-7); }
+        .voc-panel {
+            margin-bottom: 24px;
+            padding: 22px;
+            border: 1px solid rgba(196, 168, 130, 0.35);
+            border-radius: var(--radius);
+            background: rgba(196, 168, 130, 0.08);
+        }
+        .voc-panel-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+        .voc-title {
+            font-family: var(--font-display);
+            font-size: 1.25rem;
+            color: var(--text);
+            margin-bottom: 4px;
+        }
+        .voc-meta {
+            font-size: 0.72rem;
+            color: var(--text-tertiary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        .voc-summary {
+            font-size: 0.86rem;
+            color: var(--text-secondary);
+            line-height: 1.7;
+            margin-bottom: 18px;
+        }
+        .voc-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+        .voc-theme {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 16px;
+        }
+        .voc-theme h4 {
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 8px;
+            line-height: 1.35;
+        }
+        .voc-theme p {
+            font-size: 0.78rem;
+            color: var(--text-secondary);
+            line-height: 1.55;
+            margin-bottom: 10px;
+        }
+        .voc-theme ul {
+            padding-left: 16px;
+            font-size: 0.74rem;
+            color: var(--text-secondary);
+            line-height: 1.55;
+        }
+        .voc-samples {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .voc-sample {
+            display: inline-flex;
+            max-width: 100%;
+            padding: 6px 10px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 0.72rem;
+            line-height: 1.4;
+        }
+        .voc-sample:hover { color: var(--text); box-shadow: var(--shadow); }
+
+        @media (max-width: 860px) {
+            .voc-grid { grid-template-columns: 1fr; }
+            .voc-panel-header { flex-direction: column; }
+        }
 
         /* ── Welcome State ── */
         .welcome-state {
@@ -797,14 +883,15 @@
         </div>
     </div>
 
-    <!-- Module 5: Industry News & Discussions -->
+    <!-- Module 5: Industry News & Reddit VOC -->
     <div class="module-section" id="module5">
         <div class="module-header">
             <span class="module-number">05</span>
-            <span class="module-title">Industry News & Discussions</span>
-            <span class="module-subtitle">— Latest trend news & community insights</span>
+            <span class="module-title">Industry News & Reddit VOC</span>
+            <span class="module-subtitle">— Live news plus optional offline consumer voice snapshot</span>
         </div>
         <div class="module-card">
+            <div id="redditVocPanel"></div>
             <div class="filter-bar" id="newsFilterBar"></div>
             <div class="news-list" id="newsList"></div>
         </div>
@@ -813,7 +900,7 @@
 </div>
 
 <div class="site-footer">
-    <p>Market Radar Dashboard — Data powered by Google Trends, NewsAPI & Reddit</p>
+    <p>Market Radar Dashboard — Live data where available, transparent fallback estimates, and optional Reddit VOC snapshots</p>
 </div>
 
 <script>
@@ -932,7 +1019,7 @@ function renderDashboard(data) {
         { id: 'module2', render: () => renderConsumerFocus(data.consumer_focus) },
         { id: 'module3', render: () => renderRegionHeatmap(data.region_heatmap) },
         { id: 'module4', render: () => renderStrategy(data.strategy) },
-        { id: 'module5', render: () => renderNewsDiscussions(data.news, data.reddit) },
+        { id: 'module5', render: () => renderNewsDiscussions(data.news, data.reddit, data.reddit_voc) },
     ];
 
     modules.forEach((mod, i) => {
@@ -998,7 +1085,7 @@ function showDataQualityBanner(sources) {
         messages.push('NewsAPI is unavailable for this query.');
     }
     if (sources.reddit?.type === 'unavailable') {
-        messages.push('Reddit discussions are unavailable until Reddit OAuth credentials are configured.');
+        messages.push('Live Reddit is unavailable; the dashboard can show an offline VOC snapshot when one matches the query.');
     }
 
     if (messages.length > 0) {
@@ -1275,8 +1362,9 @@ function renderStrategy(strategy) {
 // ─────────────────────────────────────────────
 // Module 5: News & Discussions
 // ─────────────────────────────────────────────
-function renderNewsDiscussions(news, reddit) {
+function renderNewsDiscussions(news, reddit, redditVoc) {
     allNewsItems = [];
+    renderRedditVocPanel(redditVoc);
 
     // Merge news
     (news || []).forEach(n => {
@@ -1324,6 +1412,47 @@ function renderNewsDiscussions(news, reddit) {
 
     // Render items
     renderNewsList('all');
+}
+
+function renderRedditVocPanel(voc) {
+    const panel = document.getElementById('redditVocPanel');
+    if (!panel) return;
+
+    if (!voc || voc.status !== 'offline_snapshot') {
+        panel.innerHTML = '';
+        return;
+    }
+
+    const themes = (voc.themes || []).map(theme => `
+        <div class="voc-theme">
+            <h4>${escapeHtml(theme.title)}</h4>
+            <p>${escapeHtml(theme.signal)}</p>
+            <ul>
+                ${(theme.actions || []).map(action => `<li>${escapeHtml(action)}</li>`).join('')}
+            </ul>
+        </div>
+    `).join('');
+
+    const samples = (voc.sample_posts || []).map(post => `
+        <a class="voc-sample" href="${escapeHtml(post.url)}" target="_blank" rel="noopener">
+            r/${escapeHtml(post.subreddit)} · ${escapeHtml(post.title)}
+        </a>
+    `).join('');
+
+    panel.innerHTML = `
+        <div class="voc-panel">
+            <div class="voc-panel-header">
+                <div>
+                    <div class="voc-title">Reddit Voice of Customer Snapshot</div>
+                    <div class="voc-meta">${escapeHtml(voc.source || 'Offline research')} · ${escapeHtml(voc.sample_size || 0)} posts · collected ${escapeHtml(voc.collected_at || '')}</div>
+                </div>
+                <span class="news-type-badge reddit">Offline VOC</span>
+            </div>
+            <div class="voc-summary">${escapeHtml(voc.summary || '')}</div>
+            <div class="voc-grid">${themes}</div>
+            <div class="voc-samples">${samples}</div>
+        </div>
+    `;
 }
 
 function filterNews(type) {
