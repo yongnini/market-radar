@@ -675,6 +675,136 @@ def generate_reddit_voc_snapshot(keyword: str, reddit_result: dict) -> Optional[
     }
 
 
+def generate_offline_reddit_posts(keyword: str) -> list:
+    """返回 rdt-cli 采集的真实 Reddit 帖子导出。不是实时 API。"""
+    normalized = keyword.strip().lower()
+    if "portable blender" not in normalized and "personal blender" not in normalized:
+        return []
+
+    return [
+        {
+            "title": "Best portable blenders for protein shakes",
+            "subreddit": "Smoothies",
+            "url": "https://www.reddit.com/r/Smoothies/comments/1nvqwwb/best_portable_blenders_for_protein_shakes/",
+            "score": 5,
+            "comments": 12,
+            "created": datetime.fromtimestamp(1759369311.0, tz=timezone.utc).isoformat(),
+            "description": "Buyer compares Nutribullet and Ninja Blast for ice, frozen berries, bananas, and protein shakes.",
+            "type": "reddit",
+            "collection_type": "offline_real_export",
+            "collected_at": "2026-07-05",
+        },
+        {
+            "title": "Why your portable blender keeps failing with Indian ingredients and what to look for instead",
+            "subreddit": "IndianFood",
+            "url": "https://www.reddit.com/r/IndianFood/comments/1tpyd68/why_your_portable_blender_keeps_failing_with/",
+            "score": 67,
+            "comments": 37,
+            "created": datetime.fromtimestamp(1779960104.0, tz=timezone.utc).isoformat(),
+            "description": "Users discuss torque needs for dates, nuts, turmeric, amla, frozen fruit, and coconut pieces.",
+            "type": "reddit",
+            "collection_type": "offline_real_export",
+            "collected_at": "2026-07-05",
+        },
+        {
+            "title": "Best portable blender",
+            "subreddit": "Smoothies",
+            "url": "https://www.reddit.com/r/Smoothies/comments/1uaestk/best_portable_blender/",
+            "score": 5,
+            "comments": 7,
+            "created": datetime.fromtimestamp(1781905772.0, tz=timezone.utc).isoformat(),
+            "description": "Weight-loss and workday use case: quiet early-morning protein shakes without waking roommates.",
+            "type": "reddit",
+            "collection_type": "offline_real_export",
+            "collected_at": "2026-07-05",
+        },
+        {
+            "title": "Recommendations for a small personal blender",
+            "subreddit": "Smoothies",
+            "url": "https://www.reddit.com/r/Smoothies/comments/1rliir4/recommendations_for_a_small_personal_blender/",
+            "score": 5,
+            "comments": 13,
+            "created": datetime.fromtimestamp(1772719632.0, tz=timezone.utc).isoformat(),
+            "description": "Buyer wants a compact blender for ice and frozen fruit, comparing Ninja and Nutribullet.",
+            "type": "reddit",
+            "collection_type": "offline_real_export",
+            "collected_at": "2026-07-05",
+        },
+        {
+            "title": "Portable blender to make shakes?",
+            "subreddit": "IndianFood",
+            "url": "https://www.reddit.com/r/IndianFood/comments/1ruzd8x/portable_blender_to_make_shakes/",
+            "score": 1,
+            "comments": 8,
+            "created": datetime.fromtimestamp(1773633879.0, tz=timezone.utc).isoformat(),
+            "description": "Concern that Amazon-reviewed portable blenders stop working or have weak blades; BlendJet is considered.",
+            "type": "reddit",
+            "collection_type": "offline_real_export",
+            "collected_at": "2026-07-05",
+        },
+        {
+            "title": "Best portable blender suggestions?",
+            "subreddit": "IndianFood",
+            "url": "https://www.reddit.com/r/IndianFood/comments/1mstesc/best_portable_blender_suggestions/",
+            "score": 2,
+            "comments": 10,
+            "created": datetime.fromtimestamp(1755443416.0, tz=timezone.utc).isoformat(),
+            "description": "Use case centers on whey protein, fruit, and easy cleaning.",
+            "type": "reddit",
+            "collection_type": "offline_real_export",
+            "collected_at": "2026-07-05",
+        },
+        {
+            "title": "Mini blenders that actually make smoothie life easier in 2026",
+            "subreddit": "Smoothies",
+            "url": "https://www.reddit.com/r/Smoothies/comments/1rk04vc/mini_blenders_that_actually_make_smoothie_life/",
+            "score": 9,
+            "comments": 4,
+            "created": datetime.fromtimestamp(1772568887.0, tz=timezone.utc).isoformat(),
+            "description": "Post highlights frozen berries, mess reduction, fast mornings, and easy cleaning as success criteria.",
+            "type": "reddit",
+            "collection_type": "offline_real_export",
+            "collected_at": "2026-07-05",
+        },
+        {
+            "title": "The portable nutribullet blenders... what's your opinion on those?",
+            "subreddit": "newzealand",
+            "url": "https://www.reddit.com/r/newzealand/comments/1uc6x6g/the_portable_nutribullet_blenders_whats_your/",
+            "score": 2,
+            "comments": 11,
+            "created": datetime.fromtimestamp(1782091329.0, tz=timezone.utc).isoformat(),
+            "description": "Work-bag use case for afternoon protein and banana; buyer wants views beyond negative reviews.",
+            "type": "reddit",
+            "collection_type": "offline_real_export",
+            "collected_at": "2026-07-05",
+        },
+        {
+            "title": "DIM - Portable Blender",
+            "subreddit": "deinfluencingPH",
+            "url": "https://www.reddit.com/r/deinfluencingPH/comments/1tgi85b/dim_portable_blender/",
+            "score": 3,
+            "comments": 12,
+            "created": datetime.fromtimestamp(1780410863.0, tz=timezone.utc).isoformat(),
+            "description": "Buyer is deciding whether portable is worth it compared with a regular blender.",
+            "type": "reddit",
+            "collection_type": "offline_real_export",
+            "collected_at": "2026-07-05",
+        },
+        {
+            "title": "Portable Blender",
+            "subreddit": "tsa",
+            "url": "https://www.reddit.com/r/tsa/comments/1rooxrk/portable_blender/",
+            "score": 8,
+            "comments": 23,
+            "created": datetime.fromtimestamp(1773025651.0, tz=timezone.utc).isoformat(),
+            "description": "Travel and college use case raises carry-on, removable blade, and lithium battery questions.",
+            "type": "reddit",
+            "collection_type": "offline_real_export",
+            "collected_at": "2026-07-05",
+        },
+    ]
+
+
 # ─────────────────────────────────────────────
 # API 业务逻辑
 # ─────────────────────────────────────────────
@@ -714,6 +844,27 @@ def build_radar_response(params: dict) -> tuple[int, dict]:
             keyword,
         )
 
+        reddit_posts = reddit_result.get("posts", [])
+        reddit_source = {
+            "status": reddit_result.get("source_status", "unknown"),
+            "type": reddit_result.get("source_type", "unknown"),
+            "label": reddit_result.get("source_label", ""),
+            "error": reddit_result.get("error"),
+        }
+        offline_reddit_posts = []
+        if not reddit_posts:
+            offline_reddit_posts = generate_offline_reddit_posts(keyword)
+            if offline_reddit_posts:
+                reddit_posts = offline_reddit_posts
+                reddit_source = {
+                    "status": "offline",
+                    "type": "offline_export",
+                    "label": "Offline real Reddit export",
+                    "error": reddit_result.get("error"),
+                    "collected_at": "2026-07-05",
+                    "sample_size": len(offline_reddit_posts),
+                }
+
         # 组装返回数据
         response_data = {
             "keyword": keyword,
@@ -725,7 +876,7 @@ def build_radar_response(params: dict) -> tuple[int, dict]:
             "region_heatmap": trends_result.get("region_heatmap", []),
             "strategy": strategy,
             "news": news_result.get("articles", []),
-            "reddit": reddit_result.get("posts", []),
+            "reddit": reddit_posts,
             "reddit_voc": generate_reddit_voc_snapshot(keyword, reddit_result),
             "data_sources": {
                 "google_trends": {
@@ -740,12 +891,7 @@ def build_radar_response(params: dict) -> tuple[int, dict]:
                     "label": news_result.get("source_label", ""),
                     "error": news_result.get("error"),
                 },
-                "reddit": {
-                    "status": reddit_result.get("source_status", "unknown"),
-                    "type": reddit_result.get("source_type", "unknown"),
-                    "label": reddit_result.get("source_label", ""),
-                    "error": reddit_result.get("error"),
-                },
+                "reddit": reddit_source,
             },
         }
 

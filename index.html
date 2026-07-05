@@ -235,6 +235,7 @@
         .source-badge.success .dot { background: #6BAF7A; }
         .source-badge.error .dot { background: #D47272; }
         .source-badge.mock .dot { background: #D4A574; }
+        .source-badge.offline .dot { background: var(--chart-4); }
         .source-badge.pending .dot { background: var(--text-tertiary); animation: pulse 1.5s infinite; }
         .source-badge small {
             color: var(--text-tertiary);
@@ -1038,6 +1039,7 @@ function getSourceClass(source) {
     const status = source?.status || 'pending';
     const type = source?.type || '';
     if (status === 'success' && type === 'live') return 'success';
+    if (type === 'offline_export') return 'offline';
     if (status === 'error' || status === 'timeout' || type === 'unavailable') return 'error';
     if (status === 'mock' || status === 'partial' || type === 'fallback' || type === 'partial') return 'mock';
     return 'pending';
@@ -1047,6 +1049,7 @@ function getTrustLabel(source) {
     const status = source?.status || 'pending';
     const type = source?.type || '';
     if (type === 'live' && status === 'success') return 'Live data';
+    if (type === 'offline_export') return 'Real export';
     if (type === 'fallback' || status === 'mock') return 'Fallback estimate';
     if (type === 'partial' || status === 'partial') return 'Partial live data';
     if (type === 'unavailable' || status === 'error' || status === 'timeout' || status === 'skipped') return 'Unavailable';
@@ -1073,7 +1076,7 @@ function showDataSourceBar(sources) {
         </div>`;
     }).join('');
 
-    bar.innerHTML = `${badges}<div class="trust-note">Live data comes directly from external APIs. Fallback estimates are clearly marked and should be treated as demo-grade directional signals, not audited market facts.</div>`;
+    bar.innerHTML = `${badges}<div class="trust-note">Live data comes directly from external APIs. Real exports are captured records with a collection date. Fallback estimates are clearly marked and should be treated as demo-grade directional signals, not audited market facts.</div>`;
 }
 
 function showDataQualityBanner(sources) {
@@ -1086,6 +1089,9 @@ function showDataQualityBanner(sources) {
     }
     if (sources.reddit?.type === 'unavailable') {
         messages.push('Live Reddit is unavailable; the dashboard can show an offline VOC snapshot when one matches the query.');
+    }
+    if (sources.reddit?.type === 'offline_export') {
+        messages.push(`Reddit is using a real offline export collected ${sources.reddit.collected_at || 'previously'} because live OAuth is unavailable.`);
     }
 
     if (messages.length > 0) {
@@ -1385,10 +1391,10 @@ function renderNewsDiscussions(news, reddit, redditVoc) {
             title: r.title || '',
             source: `r/${r.subreddit || 'unknown'}`,
             url: r.url || '',
-            description: `↑${r.score || 0} · 💬${r.comments || 0}`,
+            description: r.description || `↑${r.score || 0} · 💬${r.comments || 0}`,
             date: r.created || '',
             type: 'reddit',
-            typeLabel: 'Reddit',
+            typeLabel: r.collection_type === 'offline_real_export' ? 'Reddit Export' : 'Reddit',
         });
     });
 
