@@ -1,11 +1,8 @@
 {
-  "version": 2,
-  "builds": [
-    { "src": "api/*.py", "use": "@vercel/python" },
-    { "src": "*.html", "use": "@vercel/static" }
-  ],
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/api/$1" },
-    { "src": "/(.*)", "dest": "/$1" }
-  ]
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "api/radar.py": {
+      "maxDuration": 10
+    }
+  }
 }

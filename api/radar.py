@@ -7,7 +7,12 @@ import json
 import hashlib
 import math
 import logging
+import os
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from http.server import BaseHTTPRequestHandler
+from urllib.parse import parse_qs, urlparse
 from typing import Optional
 
 import requests
@@ -15,8 +20,9 @@ import requests
 # ─────────────────────────────────────────────
 # 配置
 # ─────────────────────────────────────────────
-NEWS_API_KEY = "15a04a2e71b54c1688132eb969a9984e"
-DATA_TIMEOUT = 25  # 每个数据源超时秒数（Vercel 函数有 10s/60s 限制）
+NEWS_API_KEY = os.getenv("NEWS_API_KEY", "")
+DATA_TIMEOUT = 3  # 外部请求需要快速失败并降级，避免拖慢页面。
+GOOGLE_TRENDS_BUDGET = 6
 
 VALID_MARKETS = {
     "US": "United States", "JP": "Japan", "KR": "South Korea",
@@ -73,11 +79,16 @@ def fetch_google_trends(keyword: str, markets: list, timeframe: str = "today 12-
         from pytrends.request import TrendReq
         logger.info(f"[Google Trends] 尝试通过 pytrends 获取 '{keyword}' 数据...")
 
+        started_at = time.monotonic()
         pytrends = TrendReq(hl='en-US', tz=360, timeout=DATA_TIMEOUT)
 
         # 模块1: 各市场的搜索趋势
         trends_data = []
         for i, market in enumerate(markets):
+            if time.monotonic() - started_at > GOOGLE_TRENDS_BUDGET:
+                logger.warning("[Google Trends] 时间预算用尽，停止继续请求市场数据")
+                break
+
             try:
                 pytrends.build_payload([keyword], geo=market, timeframe=timeframe)
                 iot = pytrends.interest_over_time()
@@ -175,6 +186,11 @@ def fetch_google_trends(keyword: str, markets: list, timeframe: str = "today 12-
 def fetch_news(keyword: str, page_size: int = 15):
     """获取行业新闻"""
     result = {"articles": [], "source_status": "pending", "error": None}
+
+    if not NEWS_API_KEY:
+        result["source_status"] = "skipped"
+        result["error"] = "NEWS_API_KEY 环境变量未配置"
+        return result
 
     from_date, _ = get_date_range(months=1)
 
@@ -482,26 +498,17 @@ def generate_mock_trends(keyword: str, markets: list) -> dict:
 
 
 # ─────────────────────────────────────────────
-# Vercel Serverless Function 入口
+# API 业务逻辑
 # ─────────────────────────────────────────────
-def handler(request):
-    """
-    Vercel Python Runtime 入口函数
-    接收 HTTP 请求，返回市场雷达分析数据
-    """
+def build_radar_response(params: dict) -> tuple[int, dict]:
+    """接收查询参数并返回 (HTTP 状态码, JSON 数据)。"""
     try:
-        # 解析查询参数
-        params = request.args if hasattr(request, 'args') else {}
         keyword = params.get("keyword", "")
         markets_str = params.get("markets", "US,JP,KR,AE,DE,TH,PH")
         timeframe = params.get("timeframe", "today 12-m")
 
         if not keyword:
-            return {
-                "statusCode": 400,
-                "headers": {"Content-Type": "application/json"},
-                "body": json.dumps({"error": "keyword 参数是必需的"}),
-            }
+            return 400, {"error": "keyword 参数是必需的"}
 
         # 解析市场列表
         market_list = [m.strip().upper() for m in markets_str.split(",") if m.strip()]
@@ -511,10 +518,15 @@ def handler(request):
 
         logger.info(f"[Radar] keyword={keyword}, markets={market_list}")
 
-        # 串行调用各数据源（serverless 环境不适合 asyncio 并发）
-        trends_result = fetch_google_trends(keyword, market_list, timeframe)
-        news_result = fetch_news(keyword)
-        reddit_result = fetch_reddit(keyword)
+        # 外部数据源彼此独立，并行执行可以显著降低 Vercel 免费函数超时风险。
+        with ThreadPoolExecutor(max_workers=3) as executor:
+            trends_future = executor.submit(fetch_google_trends, keyword, market_list, timeframe)
+            news_future = executor.submit(fetch_news, keyword)
+            reddit_future = executor.submit(fetch_reddit, keyword)
+
+            trends_result = trends_future.result()
+            news_result = news_future.result()
+            reddit_result = reddit_future.result()
 
         # 生成策略建议
         strategy = generate_strategy(
@@ -552,19 +564,39 @@ def handler(request):
             },
         }
 
-        return {
-            "statusCode": 200,
-            "headers": {
-                "Content-Type": "application/json",
-                "Cache-Control": "public, max-age=300",
-            },
-            "body": json.dumps(response_data, ensure_ascii=False, default=str),
-        }
+        return 200, response_data
 
     except Exception as e:
         logger.error(f"[Radar] 未捕获异常: {e}", exc_info=True)
-        return {
-            "statusCode": 500,
-            "headers": {"Content-Type": "application/json"},
-            "body": json.dumps({"error": f"服务器内部错误: {str(e)}"}, ensure_ascii=False),
-        }
+        return 500, {"error": f"服务器内部错误: {str(e)}"}
+
+
+# ─────────────────────────────────────────────
+# Vercel Serverless Function 入口
+# ─────────────────────────────────────────────
+class handler(BaseHTTPRequestHandler):
+    """Vercel Python Runtime 会加载这个 BaseHTTPRequestHandler 子类。"""
+
+    def _send_json(self, status_code: int, payload: dict):
+        body = json.dumps(payload, ensure_ascii=False, default=str).encode("utf-8")
+        self.send_response(status_code)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Cache-Control", "public, max-age=300")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_OPTIONS(self):
+        self.send_response(204)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
+
+    def do_GET(self):
+        query = parse_qs(urlparse(self.path).query)
+        params = {key: values[0] for key, values in query.items() if values}
+        status_code, payload = build_radar_response(params)
+        self._send_json(status_code, payload)
