@@ -9,6 +9,7 @@ import math
 import logging
 import os
 import time
+import base64
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler
@@ -21,6 +22,8 @@ import requests
 # 配置
 # ─────────────────────────────────────────────
 NEWS_API_KEY = os.getenv("NEWS_API_KEY", "")
+REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID", "")
+REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET", "")
 DATA_TIMEOUT = 3  # 外部请求需要快速失败并降级，避免拖慢页面。
 GOOGLE_TRENDS_BUDGET = 6
 
@@ -72,6 +75,8 @@ def fetch_google_trends(keyword: str, markets: list, timeframe: str = "today 12-
         "consumer_focus": [],
         "region_heatmap": [],
         "source_status": "pending",
+        "source_type": "live",
+        "source_label": "Checking Google Trends",
         "error": None,
     }
 
@@ -165,6 +170,8 @@ def fetch_google_trends(keyword: str, markets: list, timeframe: str = "today 12-
         if trends_data:
             has_data = any(t["data"] for t in trends_data)
             result["source_status"] = "success" if has_data else "partial"
+            result["source_type"] = "live" if has_data else "partial"
+            result["source_label"] = "Live relative search interest" if has_data else "Partial live data"
             if not has_data:
                 result["error"] = "部分数据获取失败"
         else:
@@ -185,10 +192,18 @@ def fetch_google_trends(keyword: str, markets: list, timeframe: str = "today 12-
 # ─────────────────────────────────────────────
 def fetch_news(keyword: str, page_size: int = 15):
     """获取行业新闻"""
-    result = {"articles": [], "source_status": "pending", "error": None}
+    result = {
+        "articles": [],
+        "source_status": "pending",
+        "source_type": "live",
+        "source_label": "Checking NewsAPI",
+        "error": None,
+    }
 
     if not NEWS_API_KEY:
         result["source_status"] = "skipped"
+        result["source_type"] = "unavailable"
+        result["source_label"] = "NewsAPI key not configured"
         result["error"] = "NEWS_API_KEY 环境变量未配置"
         return result
 
@@ -223,56 +238,128 @@ def fetch_news(keyword: str, page_size: int = 15):
                 })
             result["articles"] = articles
             result["source_status"] = "success"
+            result["source_type"] = "live"
+            result["source_label"] = "Live NewsAPI articles"
         else:
             result["source_status"] = "error"
+            result["source_type"] = "unavailable"
+            result["source_label"] = "NewsAPI unavailable"
             result["error"] = data.get("message", "NewsAPI 返回错误")
 
     except requests.Timeout:
         result["source_status"] = "timeout"
+        result["source_type"] = "unavailable"
+        result["source_label"] = "NewsAPI timed out"
         result["error"] = "NewsAPI 请求超时"
     except Exception as e:
         result["source_status"] = "error"
+        result["source_type"] = "unavailable"
+        result["source_label"] = "NewsAPI unavailable"
         result["error"] = str(e)
 
     return result
 
 
 # ─────────────────────────────────────────────
-# 数据源 3: Reddit（公开 JSON API，无需认证）
+# 数据源 3: Reddit（优先 OAuth，未配置时尝试公开 JSON 降级）
 # ─────────────────────────────────────────────
+def get_reddit_access_token() -> Optional[str]:
+    """使用 app-only OAuth 获取 Reddit token。未配置凭证时返回 None。"""
+    if not REDDIT_CLIENT_ID or not REDDIT_CLIENT_SECRET:
+        return None
+
+    auth = f"{REDDIT_CLIENT_ID}:{REDDIT_CLIENT_SECRET}".encode("utf-8")
+    basic = base64.b64encode(auth).decode("ascii")
+    resp = requests.post(
+        "https://www.reddit.com/api/v1/access_token",
+        data={"grant_type": "client_credentials"},
+        headers={
+            "Authorization": f"Basic {basic}",
+            "User-Agent": "MarketRadar/1.1 by yongnini",
+        },
+        timeout=DATA_TIMEOUT,
+    )
+    if resp.status_code != 200:
+        raise RuntimeError(f"Reddit OAuth 返回 {resp.status_code}")
+
+    token = resp.json().get("access_token")
+    if not token:
+        raise RuntimeError("Reddit OAuth 未返回 access_token")
+    return token
+
+
+def append_reddit_posts(result: dict, data: dict):
+    """从 Reddit listing 响应中提取帖子。"""
+    posts = data.get("data", {}).get("children", [])
+    for p in posts:
+        d = p.get("data", {})
+        result["posts"].append({
+            "title": d.get("title", ""),
+            "subreddit": d.get("subreddit", ""),
+            "url": f"https://reddit.com{d.get('permalink', '')}",
+            "score": safe_value(d.get("score", 0)),
+            "comments": safe_value(d.get("num_comments", 0)),
+            "created": datetime.fromtimestamp(
+                d.get("created_utc", 0), tz=timezone.utc
+            ).isoformat(),
+            "type": "reddit",
+        })
+
+
 def fetch_reddit(keyword: str, limit: int = 10):
     """获取 Reddit 讨论"""
-    result = {"posts": [], "source_status": "pending", "error": None}
+    result = {
+        "posts": [],
+        "source_status": "pending",
+        "source_type": "live",
+        "source_label": "Checking Reddit",
+        "error": None,
+    }
 
     try:
+        token = get_reddit_access_token()
+        if token:
+            resp = requests.get(
+                "https://oauth.reddit.com/search",
+                params={"q": keyword, "limit": limit, "sort": "relevance", "t": "year"},
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "User-Agent": "MarketRadar/1.1 by yongnini",
+                },
+                timeout=DATA_TIMEOUT,
+            )
+            if resp.status_code == 200:
+                append_reddit_posts(result, resp.json())
+                result["source_status"] = "success"
+                result["source_type"] = "live"
+                result["source_label"] = "Live Reddit OAuth data"
+            else:
+                result["source_status"] = "error"
+                result["source_type"] = "unavailable"
+                result["source_label"] = "Reddit OAuth unavailable"
+                result["error"] = f"Reddit OAuth 返回 {resp.status_code}"
+            return result
+
         resp = requests.get(
             "https://www.reddit.com/search.json",
             params={"q": keyword, "limit": limit, "sort": "relevance", "t": "year"},
-            headers={"User-Agent": "MarketRadar/1.0"},
+            headers={"User-Agent": "MarketRadar/1.1 by yongnini"},
             timeout=DATA_TIMEOUT,
         )
         if resp.status_code == 200:
-            data = resp.json()
-            posts = data.get("data", {}).get("children", [])
-            for p in posts:
-                d = p.get("data", {})
-                result["posts"].append({
-                    "title": d.get("title", ""),
-                    "subreddit": d.get("subreddit", ""),
-                    "url": f"https://reddit.com{d.get('permalink', '')}",
-                    "score": safe_value(d.get("score", 0)),
-                    "comments": safe_value(d.get("num_comments", 0)),
-                    "created": datetime.fromtimestamp(
-                        d.get("created_utc", 0), tz=timezone.utc
-                    ).isoformat(),
-                    "type": "reddit",
-                })
+            append_reddit_posts(result, resp.json())
             result["source_status"] = "success"
+            result["source_type"] = "live"
+            result["source_label"] = "Live Reddit public JSON"
         else:
             result["source_status"] = "error"
-            result["error"] = f"Reddit 返回 {resp.status_code}"
+            result["source_type"] = "unavailable"
+            result["source_label"] = "Reddit OAuth not configured"
+            result["error"] = f"Reddit public JSON 返回 {resp.status_code}；配置 REDDIT_CLIENT_ID 和 REDDIT_CLIENT_SECRET 可启用 OAuth"
     except Exception as e:
         result["source_status"] = "error"
+        result["source_type"] = "unavailable"
+        result["source_label"] = "Reddit unavailable"
         result["error"] = str(e)
 
     return result
@@ -493,6 +580,8 @@ def generate_mock_trends(keyword: str, markets: list) -> dict:
         "consumer_focus": consumer_focus,
         "region_heatmap": region_heatmap,
         "source_status": "mock",
+        "source_type": "fallback",
+        "source_label": "Fallback estimate",
         "error": "使用模拟数据（Google Trends 服务不可用）",
     }
 
@@ -551,14 +640,20 @@ def build_radar_response(params: dict) -> tuple[int, dict]:
             "data_sources": {
                 "google_trends": {
                     "status": trends_result.get("source_status", "unknown"),
+                    "type": trends_result.get("source_type", "unknown"),
+                    "label": trends_result.get("source_label", ""),
                     "error": trends_result.get("error"),
                 },
                 "newsapi": {
                     "status": news_result.get("source_status", "unknown"),
+                    "type": news_result.get("source_type", "unknown"),
+                    "label": news_result.get("source_label", ""),
                     "error": news_result.get("error"),
                 },
                 "reddit": {
                     "status": reddit_result.get("source_status", "unknown"),
+                    "type": reddit_result.get("source_type", "unknown"),
+                    "label": reddit_result.get("source_label", ""),
                     "error": reddit_result.get("error"),
                 },
             },

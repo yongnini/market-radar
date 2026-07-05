@@ -1,0 +1,75 @@
+name: Market Radar Smoke Test
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+
+      - name: Compile API
+        run: python -m py_compile api/radar.py
+
+      - name: Exercise response builder
+        run: |
+          python - <<'PY'
+          import importlib.util
+          from pathlib import Path
+
+          spec = importlib.util.spec_from_file_location("radar", Path("api/radar.py"))
+          radar = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(radar)
+
+          status, data = radar.build_radar_response({
+              "keyword": "portable blender",
+              "markets": "US,JP",
+          })
+
+          assert status == 200, status
+          assert data["keyword"] == "portable blender"
+          assert data["markets"] == ["US", "JP"]
+          assert "data_sources" in data
+          assert "google_trends" in data["data_sources"]
+          PY
+
+      - name: Check production API
+        run: |
+          python - <<'PY'
+          import json
+          import time
+          import urllib.request
+
+          url = "https://market-radar-inky.vercel.app/api/radar?keyword=portable+blender&markets=US,JP"
+          last_error = None
+
+          for attempt in range(1, 11):
+              try:
+                  with urllib.request.urlopen(url, timeout=30) as response:
+                      body = response.read().decode("utf-8")
+                      data = json.loads(body)
+                  assert data["keyword"] == "portable blender"
+                  assert data["markets"] == ["US", "JP"]
+                  assert "data_sources" in data
+                  print("Production API OK")
+                  raise SystemExit(0)
+              except Exception as exc:
+                  last_error = exc
+                  print(f"Attempt {attempt} failed: {exc}")
+                  time.sleep(20)
+
+          raise SystemExit(f"Production API smoke test failed: {last_error}")
+          PY

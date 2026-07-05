@@ -34,9 +34,41 @@ market-radar-deploy/
    - Name: `NEWS_API_KEY`
    - Value: 你的 NewsAPI Key
    - Environments: Production、Preview、Development 都勾选
-5. 保存后，回到 `Deployments`。
-6. 点最新一次部署右侧的三个点，选择 `Redeploy`。
-7. Redeploy 时如果出现选项，选择使用最新源码重新部署。
+5. 如果要启用稳定 Reddit 数据，再新增：
+   - Name: `REDDIT_CLIENT_ID`
+   - Value: Reddit app 的 client id
+   - Environments: Production、Preview、Development 都勾选
+6. 再新增：
+   - Name: `REDDIT_CLIENT_SECRET`
+   - Value: Reddit app 的 client secret
+   - Environments: Production、Preview、Development 都勾选
+7. 保存后，回到 `Deployments`。
+8. 点最新一次部署右侧的三个点，选择 `Redeploy`。
+9. Redeploy 时如果出现选项，选择使用最新源码重新部署。
+
+## 数据真实性说明
+
+页面会显示每个数据源的可信状态：
+
+- `Live data`：来自真实外部 API。
+- `Partial live data`：拿到部分真实数据，但不是完整响应。
+- `Fallback estimate`：外部服务不可用时生成的演示级估算数据。
+- `Unavailable`：该数据源当前不可用，页面不会把它伪装成真实数据。
+
+Google Trends 使用 `pytrends`，不是 Google 官方 API，所以偶尔失败是正常现象。失败时趋势模块会显示 fallback estimate。
+
+NewsAPI 需要 `NEWS_API_KEY`。没有配置时新闻模块会显示不可用。
+
+Reddit 优先使用 OAuth。没有 `REDDIT_CLIENT_ID` 和 `REDDIT_CLIENT_SECRET` 时会尝试公开 JSON 接口；如果 Reddit 返回 403，页面会显示 Reddit unavailable。
+
+## GitHub Actions
+
+仓库包含 `.github/workflows/market-radar-smoke.yml`。每次推送到 `main` 后会自动：
+
+1. 安装 Python 依赖。
+2. 检查 `api/radar.py` 语法。
+3. 调用本地 response builder，确认返回结构。
+4. 重试检查线上 `/api/radar` 是否返回可解析 JSON。
 
 ## 部署后检查
 

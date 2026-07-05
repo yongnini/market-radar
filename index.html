@@ -236,6 +236,18 @@
         .source-badge.error .dot { background: #D47272; }
         .source-badge.mock .dot { background: #D4A574; }
         .source-badge.pending .dot { background: var(--text-tertiary); animation: pulse 1.5s infinite; }
+        .source-badge small {
+            color: var(--text-tertiary);
+            font-size: 0.68rem;
+            font-weight: 400;
+            margin-left: 2px;
+        }
+        .trust-note {
+            width: 100%;
+            color: var(--text-tertiary);
+            font-size: 0.76rem;
+            line-height: 1.6;
+        }
 
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
 
@@ -875,7 +887,11 @@ async function handleSearch() {
     // Hide welcome, show data source bar
     document.getElementById('welcomeState').style.display = 'none';
     hideAllModules();
-    showDataSourceBar(['pending', 'pending', 'pending']);
+    showDataSourceBar({
+        google_trends: { status: 'pending', type: 'pending', label: 'Checking Google Trends' },
+        newsapi: { status: 'pending', type: 'pending', label: 'Checking NewsAPI' },
+        reddit: { status: 'pending', type: 'pending', label: 'Checking Reddit' },
+    });
     hideInfoBanner();
 
     try {
@@ -907,17 +923,8 @@ async function handleSearch() {
 function renderDashboard(data) {
     // Update data source badges
     const sources = data.data_sources || {};
-    const statuses = [
-        sources.google_trends?.status || 'error',
-        sources.newsapi?.status || 'error',
-        sources.reddit?.status || 'error',
-    ];
-    showDataSourceBar(statuses);
-
-    // Show info banner if mock data
-    if (sources.google_trends?.status === 'mock') {
-        showInfoBanner('info', '📊 Using simulated trend data (Google Trends service unavailable). News and Reddit data are from live APIs.');
-    }
+    showDataSourceBar(sources);
+    showDataQualityBanner(sources);
 
     // Render modules with staggered animation
     const modules = [
@@ -940,22 +947,65 @@ function renderDashboard(data) {
 // ─────────────────────────────────────────────
 // Data Source Bar
 // ─────────────────────────────────────────────
-function showDataSourceBar(statuses) {
+function getSourceClass(source) {
+    const status = source?.status || 'pending';
+    const type = source?.type || '';
+    if (status === 'success' && type === 'live') return 'success';
+    if (status === 'error' || status === 'timeout' || type === 'unavailable') return 'error';
+    if (status === 'mock' || status === 'partial' || type === 'fallback' || type === 'partial') return 'mock';
+    return 'pending';
+}
+
+function getTrustLabel(source) {
+    const status = source?.status || 'pending';
+    const type = source?.type || '';
+    if (type === 'live' && status === 'success') return 'Live data';
+    if (type === 'fallback' || status === 'mock') return 'Fallback estimate';
+    if (type === 'partial' || status === 'partial') return 'Partial live data';
+    if (type === 'unavailable' || status === 'error' || status === 'timeout' || status === 'skipped') return 'Unavailable';
+    return 'Checking';
+}
+
+function showDataSourceBar(sources) {
     const bar = document.getElementById('dataSourceBar');
     bar.style.display = 'flex';
-    const labels = ['Google Trends', 'NewsAPI', 'Reddit'];
-    const icons = ['📈', '📰', '💬'];
+    const sourceList = [
+        { key: 'google_trends', label: 'Google Trends', icon: '📈' },
+        { key: 'newsapi', label: 'NewsAPI', icon: '📰' },
+        { key: 'reddit', label: 'Reddit', icon: '💬' },
+    ];
 
-    bar.innerHTML = labels.map((label, i) => {
-        const status = statuses[i] || 'pending';
-        const statusClass = status === 'success' ? 'success' :
-                          (status === 'error' || status === 'timeout') ? 'error' :
-                          (status === 'mock' || status === 'partial' || status === 'fallback') ? 'mock' : 'pending';
+    const badges = sourceList.map(({ key, label, icon }) => {
+        const source = sources?.[key] || { status: 'pending', type: 'pending' };
+        const statusClass = getSourceClass(source);
+        const trustLabel = getTrustLabel(source);
         return `<div class="source-badge ${statusClass}">
             <span class="dot"></span>
-            <span>${icons[i]} ${label}</span>
+            <span>${icon} ${label}</span>
+            <small>${escapeHtml(trustLabel)}</small>
         </div>`;
     }).join('');
+
+    bar.innerHTML = `${badges}<div class="trust-note">Live data comes directly from external APIs. Fallback estimates are clearly marked and should be treated as demo-grade directional signals, not audited market facts.</div>`;
+}
+
+function showDataQualityBanner(sources) {
+    const messages = [];
+    if (sources.google_trends?.type === 'fallback' || sources.google_trends?.status === 'mock') {
+        messages.push('Google Trends is using fallback estimate data.');
+    }
+    if (sources.newsapi?.type === 'unavailable') {
+        messages.push('NewsAPI is unavailable for this query.');
+    }
+    if (sources.reddit?.type === 'unavailable') {
+        messages.push('Reddit discussions are unavailable until Reddit OAuth credentials are configured.');
+    }
+
+    if (messages.length > 0) {
+        showInfoBanner('info', `Data transparency: ${messages.join(' ')}`);
+    } else {
+        hideInfoBanner();
+    }
 }
 
 function showInfoBanner(type, message) {
